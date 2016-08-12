@@ -1,0 +1,227 @@
+<!doctype HTML>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Shopping List</title>
+
+<!-- CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/pure-min.css">
+<link rel="stylesheet" href="https://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css">
+
+<style>
+* {
+    box-sizing: border-box;
+}
+body {
+    font-size: 2em;
+    color: #1E2835;
+    background-color: #F8F8F8;
+}
+.light {
+    color: #C7CACD;
+}
+a, a:active, a:hover, a:visited {
+    color: #F37A7B;
+}
+.main {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+.inner {
+    max-width: 400px;
+}
+input {
+    width: 100%;
+    background-color: #F8F8F8;
+    padding: 10px;
+}
+.add-item-form input {
+    border: 2px solid #C7CACD;
+}
+li {
+    border: 2px solid #C7CACD;
+    padding: 10px;
+}
+form, ul {
+    margin: 0;
+}
+ul {
+    padding-left: 0;
+}
+li {
+    width: 400px;
+    list-style-type: none;
+}
+.add-item-form {
+    margin-bottom: 40px;
+}
+.delete {
+    float: right;
+}
+.visually-hidden {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+</style>
+
+<div class="main">
+    <h1>Shopping List</h1>
+    <div class="inner">
+        <form class="add-item-form">
+            <label for="item-input">Add an item</label>
+            <input type="text" id="item-input"
+                name="item-input" title="Item" required autocomplete="off"
+                autofocus>
+            <button type="submit" class="visually-hidden">Add item</button>
+        </form>
+        <ul class="item-list">
+        </ul>
+    </div>
+    <p class="light">Double-click to edit items</p>
+</div>
+</body>
+
+<!-- Handlebars templates -->
+<script id="item-list-template" type="text/x-handlebars-template">
+<ul class="item-list">
+    {{#each items}}
+    <li data-id="{{ id }}">
+        <div class="display">
+            <span class="name">{{name}}</span>
+            <div class="delete">
+                <a href="#" class="delete-item" aria-label="Delete item">
+                    <i class="fa fa-times" aria-hidden="true"></i>
+                </a>
+            </div>
+        </div>
+        <form class="edit-item-form" hidden>
+            <input type="text" name="edit-item-input"
+                title="Edit item">
+            <button type="submit" class="visually-hidden">Edit item</button>
+        </form>
+    </li>
+    {{/each}}
+</ul>
+</script>
+
+<!-- JS -->
+<script src="https://code.jquery.com/jquery-2.1.0.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/1.3.0/handlebars.js"></script>
+<script>
+var ShoppingList = function() {
+    this.items = [];
+    this.itemList = $('.item-list');
+    this.itemListTemplate = Handlebars.compile($("#item-list-template").html());
+    this.form = $('.add-item-form');
+    this.form.submit(this.onAddItemSubmit.bind(this));
+    this.input = $('#item-input');
+    this.main = $('.main');
+    this.main.on('dblclick', 'li',
+                 this.onEditItemClicked.bind(this));
+    this.main.on('submit', '.edit-item-form',
+                 this.onEditItemSubmit.bind(this));
+    this.main.on('focusout', 'li input',
+                 this.onEditFocusOut.bind(this));
+    this.main.on('click', 'li .delete-item',
+                 this.onDeleteItemClicked.bind(this));
+    this.getItems();
+};
+ShoppingList.prototype.onAddItemSubmit = function(event) {
+    event.preventDefault();
+    var value = this.input.val().trim();
+    if (value != '') {
+        this.addItem(value);
+    }
+    this.form[0].reset();
+};
+ShoppingList.prototype.onEditItemClicked = function(event) {
+    event.preventDefault();
+    var item = $(event.target).parents('li');
+    var display = item.children('.display');
+    var form = item.children('form');
+    var input = form.children('input');
+    var name = display.children('.name');
+    form.attr('hidden', null);
+    input.focus();
+    input.val(name.text());
+    display.hide();
+};
+ShoppingList.prototype.onEditItemSubmit = function(event) {
+    event.preventDefault();
+    var input = $(event.target).children('input');
+    input.blur();
+};
+ShoppingList.prototype.onEditFocusOut = function(event) {
+    var item = $(event.target).parents('li');
+    var id = item.data('id');
+    var display = item.children('.display');
+    var form = item.children('form');
+    var input = form.children('input');
+    var name = display.children('.name');
+    var value = input.val().trim();
+    if (value != '') {
+        this.editItem(id, value);
+        name.text(value);
+    }
+    form.attr('hidden', true);
+    display.show();
+    event.preventDefault();
+};
+ShoppingList.prototype.onDeleteItemClicked = function(event) {
+    var id = $(event.target).parents('li').data('id');
+    this.deleteItem(id);
+};
+ShoppingList.prototype.getItems = function() {
+    var ajax = $.ajax('/items', {
+        type: 'GET',
+        dataType: 'json'
+    });
+    ajax.done(this.onGetItemsDone.bind(this));
+};
+ShoppingList.prototype.addItem = function(name) {
+    var item = {'name': name};
+    var ajax = $.ajax('/items', {
+        type: 'POST',
+        data: JSON.stringify(item),
+        dataType: 'json',
+        contentType: 'application/json'
+    });
+    ajax.done(this.getItems.bind(this));
+};
+ShoppingList.prototype.deleteItem = function(id) {
+    var ajax = $.ajax('/items/' + id, {
+        type: 'DELETE',
+        dataType: 'json'
+    });
+    ajax.done(this.getItems.bind(this));
+};
+ShoppingList.prototype.editItem = function(id, name) {
+    var item = {'name': name, 'id': id};
+    var ajax = $.ajax('/items/' + id, {
+        type: 'PUT',
+        data: JSON.stringify(item),
+        dataType: 'json',
+        contentType: 'application/json'
+    });
+    ajax.done(this.getItems.bind(this));
+};
+ShoppingList.prototype.onGetItemsDone = function(items) {
+    this.items = items;
+    this.updateItemsView();
+};
+ShoppingList.prototype.updateItemsView = function() {
+    var context = {
+        items: this.items
+    };
+    var itemList = $(this.itemListTemplate(context));
+    this.itemList.replaceWith(itemList);
+    this.itemList = itemList;
+};
+$(document).ready(function() {
+    var app = new ShoppingList();
+});
+</script>
